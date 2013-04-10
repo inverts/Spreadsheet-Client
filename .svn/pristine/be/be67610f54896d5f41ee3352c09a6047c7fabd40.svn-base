@@ -1,0 +1,234 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+using SS;
+using SpreadsheetUtilities;
+using System.Text.RegularExpressions;
+
+namespace SpreadsheetGUI
+{
+    public partial class Form1 : Form
+    {
+        private int currentCol = 0;
+        private int currentRow = 0;
+        private string version = "ps6";
+        private Spreadsheet spreadsheetData;
+        private string currentFile;
+
+        public Form1()
+        {
+            spreadsheetData = new Spreadsheet((string s) => true, (string s) => s.ToUpper(), version.ToString());   //No validation function, normalization is to push everything to uppercase. 
+            InitializeComponent();
+            spreadsheetPanel1.SelectionChanged += selectionChanged; //Set it so our selectionChanged method is called when the SelectionChanged event is fired.
+            spreadsheetPanel1.SetSelection(currentCol, currentRow); //Set the current selection to the first row and column.
+            
+        }
+
+        private void loadFile(string filename)
+        {
+            this.spreadsheetData.GetSavedVersion(filename); //Load the spreadsheet cell data
+            updateSpreadsheetView();    //Clear all the old cells and fill it in with the new data
+            int newRow, newCol;
+            loadSelectionInfo(spreadsheetPanel1, out newRow, out newCol);
+            currentFile = filename; //Set the current file name
+            this.Text = "Fauxcel Spreadsheet - " + filename;
+            clearToolStrip();
+            toolStripStatusLabel1.Text = "File loaded successfully.";
+        }
+        private void saveFile(string filename)
+        {
+            this.spreadsheetData.Save(filename);
+            currentFile = filename; //Set the current file name
+            this.Text = "Fauxcel Spreadsheet - " + filename;
+            clearToolStrip();
+            toolStripStatusLabel1.Text = "File saved successfully at " + filename;
+        }
+        private void updateSpreadsheetView()
+        {
+            clearSpreadsheetView();
+            foreach (string s in spreadsheetData.GetNamesOfAllNonemptyCells())
+            {
+                int row, col;
+                getCellLocation(s, out col, out row);
+                object newValueObject = spreadsheetData.GetCellValue(s);
+                string newValue = newValueObject.ToString();
+                if (newValueObject.GetType() == typeof(FormulaError))  //If the value returned is a FormulaError, follow it with its message.
+                    newValue += ": " + ((FormulaError)newValueObject).Reason;
+                spreadsheetPanel1.SetValue(col, row, newValue);
+            }
+            clearToolStrip();
+            toolStripStatusLabel1.Text = "Spreadsheet updated.";
+        }
+        private void clearSpreadsheetView()
+        {
+            //formulaBox.Clear();
+            //cellNameBox.Clear();
+            //valueBox.Clear();
+            spreadsheetPanel1.Clear();
+        }
+        private void clearToolStrip()
+        {
+            toolStripStatusLabel1.Text = "";
+            toolStripErrorLabel.Text = "";
+        }
+        /// <summary>
+        /// Saves the content currently written in the formula box to the current selected cell.
+        /// </summary>
+        private void saveFormulaToCurrentSelection()
+        {
+            string currentCell = getCellName(this.currentCol, this.currentRow); //Get the current cell name (not numbers)
+            try
+            {
+                //If this doesn't throw an exception, it only guarantees that the formula is syntactically correct.
+                spreadsheetData.SetContentsOfCell(currentCell, formulaBox.Text); 
+            }
+            catch (CircularException ce)
+            {
+                clearToolStrip();
+                toolStripErrorLabel.Text = "The formula you attempted to enter in to " + currentCell + " causes a circular dependency.";
+                return; //Don't attempt to finish the rest of this.
+            }
+            catch (FormulaFormatException ffe)
+            {
+                clearToolStrip();
+                toolStripErrorLabel.Text = "Your formula has an error: " + ffe.Message;
+                return; //Don't attempt to finish the rest of this.
+            }
+
+            
+
+            updateSpreadsheetView();    //This is inefficient, but it is how we make sure an update to a dependent cell triggers an update to its dependee.
+
+            loadSelectionInfo(spreadsheetPanel1, out this.currentRow, out this.currentCol);
+        }
+
+
+        /// <summary>
+        /// Returns the string name representation of the row and column selected. ie. column 2, row 4 is "C5".
+        /// </summary>
+        /// <param name="column"></param>
+        /// <param name="row"></param>
+        /// <returns></returns>
+        private string getCellName(int column, int row)
+        {
+            char[] alphabet = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' };
+            return alphabet[column] + (row + 1).ToString();
+        }
+
+        private void getCellLocation(string cellName, out int column, out int row)
+        {
+            int startingPoint = (int)'A'; //We know all the characters are listed in order in ASCII
+
+            column = ((int)(Regex.Match(cellName, @"[A-Z]").ToString()[0])) - startingPoint; //Get the letter part. This only works for single-letter cells.
+            row = int.Parse(Regex.Match(cellName, @"[0-9]+").ToString()) - 1; 
+        }
+
+        /// <summary>
+        /// Method that runs when the SpreadsheetPanel SelectionChanged event is fired.
+        /// 
+        /// </summary>
+        /// <param name="sp"></param>
+        public void selectionChanged(SpreadsheetPanel sp)
+        {
+            saveFormulaToCurrentSelection();    //Before changing the formula bar to the new selection, save any changes to the bar.
+
+            int newRow, newCol; 
+            loadSelectionInfo(sp, out newRow, out newCol);
+
+            formulaBox.SelectAll(); //Select all the text for easy re-writing.
+
+            //Save the current cell location information in this class.
+            this.currentCol = newCol;
+            this.currentRow = newRow;
+        }
+
+        private void loadSelectionInfo(SpreadsheetPanel sp, out int newRow, out int newCol)
+        {
+            sp.GetSelection(out newCol, out newRow);    //Get the new selected column and row.
+            string newCellName = getCellName(newCol, newRow);   //Get the name of the cell so we can get more info about it
+
+            object cellContents = spreadsheetData.GetCellContents(newCellName); //Get the contents of the cell
+            if (cellContents.GetType() == typeof(Formula))
+                formulaBox.Text = "=" + cellContents.ToString();
+            else
+                formulaBox.Text = cellContents.ToString();    //Display the contents of the new selection in the formula box.
+
+            cellNameBox.Text = newCellName; //Display the cell name
+
+            string currentValue;
+            spreadsheetPanel1.GetValue(newCol, newRow, out currentValue);
+            valueBox.Text = currentValue;   //Display the cell value
+        }
+
+        /*
+         * Event handlers
+         * 
+         * */
+        private void newToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            MyApplicationContext.getAppContext().RunForm(new Form1());
+        }
+
+        private void formulaBox_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+                saveFormulaToCurrentSelection();
+        }
+
+        private void openToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            openFileDialog1.ShowDialog();
+        }
+
+        private void openFileDialog1_FileOk(object sender, CancelEventArgs e)
+        {
+            loadFile(openFileDialog1.FileName);
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            formulaBox.Select(); //Give initial focus to the formulaBox.
+        }
+
+
+        private void saveFileDialog1_FileOk(object sender, CancelEventArgs e)
+        {
+            saveFile(saveFileDialog1.FileName);
+        }
+
+        private void saveToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (this.currentFile != null)
+                this.saveFile(this.currentFile);
+            else
+                saveFileDialog1.ShowDialog();
+        }
+
+        private void toolStripErrorLabel_TextChanged(object sender, EventArgs e)
+        {
+            this.Activate();
+        }
+
+        private void closeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (spreadsheetData.Changed && MessageBox.Show("Your changes have not been saved. Are you sure you want to close?", "Unsaved Changes", MessageBoxButtons.YesNo) == DialogResult.No)
+                return;
+            this.Close();
+        }
+
+        private void generalHelpToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("The following explains some basic functionality of this spreadsheet:\n-Select cells using your mouse.\n-Edit cell contents via the formula bar at the top of the window. Your edits will be saved upon hitting Enter or selecting a different cell.\n-To reference the data of other cells in a cell's content, please type out the cell name (ie. \"C5\"); clicking on the cell you wish to reference will not work.", "Spreadsheet Help" ,MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void saveAsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            saveFileDialog1.ShowDialog();
+        }
+    }
+}

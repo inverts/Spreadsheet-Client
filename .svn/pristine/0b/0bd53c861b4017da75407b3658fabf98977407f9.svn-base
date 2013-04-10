@@ -1,0 +1,75 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+using SS;
+
+namespace SpreadsheetGUI
+{
+    public partial class Form1 : Form
+    {
+        private int currentCol = 0;
+        private int currentRow = 0;
+        private double version = 1.0;
+        private Spreadsheet spreadsheetData;
+
+        public Form1()
+        {
+            spreadsheetData = new Spreadsheet((string s) => true, (string s) => s.ToUpper(), version.ToString());   
+            InitializeComponent();
+            spreadsheetPanel1.SelectionChanged += selectionChanged;
+            spreadsheetPanel1.SetSelection(currentCol, currentRow);
+        }
+        private void saveFile()
+        {
+
+        }
+        private void saveFormulaToCurrentSelection()
+        {
+
+            spreadsheetPanel1.SetValue(this.currentCol, this.currentRow, formulaBox.Text);
+        }
+        public void selectionChanged(SpreadsheetPanel sp)
+        {
+            saveFormulaToCurrentSelection();    //Before changing the formula bar to the new selection, save any changes to the bar.
+
+            int newRow, newCol;
+            sp.GetSelection(out newCol, out newRow);    //Get the new selected column and row.
+            string stringVal;
+            if (!sp.GetValue(newCol, newRow, out stringVal))    //Get the value of the new selection
+                stringVal = "Error: Selection out of range.";
+            formulaBox.Text = stringVal;    //Display the value/formula of the new selection in the formula box.
+            this.currentCol = newCol;
+            this.currentRow = newRow;
+        }
+
+        /*
+         * Event handlers
+         * 
+         * */
+        private void newToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            MyApplicationContext.getAppContext().RunForm(new Form1());
+        }
+
+        private void formulaBox_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+                saveFormulaToCurrentSelection();
+        }
+
+        private void openToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            openFileDialog1.ShowDialog();
+        }
+
+        private void openFileDialog1_FileOk(object sender, CancelEventArgs e)
+        {
+
+        }
+    }
+}

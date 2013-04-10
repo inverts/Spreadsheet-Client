@@ -1,0 +1,57 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+using SS;
+
+namespace SpreadsheetGUI
+{
+    public partial class Form1 : Form
+    {
+        private int currentCol = 0;
+        private int currentRow = 0;
+        public Form1()
+        {
+            InitializeComponent();
+            spreadsheetPanel1.SelectionChanged += selectionChanged;
+            spreadsheetPanel1.SetSelection(currentCol, currentRow);
+        }
+        public void selectionChanged(SpreadsheetPanel sp)
+        {
+            saveFormulaToCurrentSelection();    //Before changing the formula bar to the new selection, save any changes to the bar.
+
+            int newRow, newCol;
+            sp.GetSelection(out newCol, out newRow);
+            string stringVal;
+            if (!sp.GetValue(newCol, newRow, out stringVal))
+                stringVal = "Error: Selection out of range.";
+            formulaBox.Text = stringVal;
+            this.currentCol = newCol;
+            this.currentRow = newRow;
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void newToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            
+        }
+
+        private void formulaBox_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+                saveFormulaToCurrentSelection();
+        }
+        private void saveFormulaToCurrentSelection()
+        {
+            spreadsheetPanel1.SetValue(this.currentCol, this.currentRow, formulaBox.Text);
+        }
+    }
+}
